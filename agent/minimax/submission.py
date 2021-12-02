@@ -1,6 +1,4 @@
 DEPTH = 3
-BEAN = 10
-BODY = -100
 
 # Action
 class Action:
@@ -26,80 +24,21 @@ class Action:
         elif action == (0, -1):
             return (state[0], (state[1]+board_width-1) % board_width)
 
-# evaluate the gamestate
-class SnakeMDP:
-    def __init__(self, obs, gamma=1.):
-        self.states = set()
-        self.reward = {}
-        for i in range(obs['board_height']):
-            for j in range(obs['board_width']):
-                self.states.add((i, j))
-                self.reward[(i,j)] = 0
-        for cor in obs[1]:
-            self.reward[tuple(cor)] = 10
-        for i in range(2, 8):
-            for cor in obs[i]:
-                self.reward[tuple(cor)] = BODY
-        self.reward[tuple(obs[obs['controlled_snake_index']][0])] = 0
-        self.gamma = gamma
-        self.transitions = {}
-        for s in self.states:
-            self.transitions[s] = {}
-            for a in Action.actlist:
-                if self.reward[s]:
-                    self.transitions[s][a] = [(0.0, s)]
-                else:
-                    self.transitions[s][a] = [(1.0, Action.go(s, a, obs['board_height'], obs['board_width']))]
-
-    def R(self, state):
-        return self.reward[state]
-
-    def T(self, state, action):
-        if not self.transitions:
-            raise ValueError("Transition model is missing")
-        else:
-            return self.transitions[state][action]
-
-    def expected_utility(self, a, s, U):
-        q = 0
-        for p in self.T(s, a):
-            q += p[0] * (self.R(p[1]) + self.gamma * U[p[1]])
-        return q
-
-    def value_iteration(self, epsilon=0.001):
-        U1 = {s: 0 for s in self.states}
-        while True:
-            convergent = True
-            for s in self.states:
-                if self.reward[s]:
-                    continue
-                qs = [self.expected_utility(a, s, U1) for a in Action.actlist]
-                v = max(qs)
-                if -epsilon > v - U1[s] or v - U1[s] > epsilon:
-                    convergent = False
-                U1[s] = v
-            if convergent:
-                break
-        return U1
-
-    def best_policy(self):
-        U = self.value_iteration()
-        policy = {}
-        for s in self.states:
-            actions = Action.actlist
-            qs = [self.expected_utility(a, s, U) for a in actions]
-            bestq = max(qs)
-            bestIndex = qs.index(bestq)
-            policy[s] = actions[bestIndex]
-        return policy
-
 class GameState:
     obs = {}
-    food = []
     is_end = False
     def __init__(self, observation):
-        self.obs = observation.copy()
-        self.food = observation[1].copy()
+        self.obs = {
+            1: observation[1].copy(),
+            2: observation[2].copy(),
+            3: observation[3].copy(),
+            4: observation[4].copy(),
+            5: observation[5].copy(),
+            6: observation[6].copy(),
+            7: observation[7].copy(),
+            'board_width': observation['board_width'],
+            'board_height': observation['board_height'],
+        }
 
     def generateSuccessor(self, index, action):
         successor = GameState(self.obs)
@@ -110,6 +49,10 @@ class GameState:
             for cor in successor.obs[i]:
                 if cor == tar:
                     successor.is_end = True
+                    if i == 1:
+                        successor.obs[index].append(successor.obs[index][-1])
+                    else:
+                        successor.obs[index].clear()
 
         successor.obs[index].insert(0, tar)
         successor.obs[index].pop()
@@ -117,12 +60,13 @@ class GameState:
         return successor
 
     def evaluationFunction(self):
-        # ans = 0
-        head = tuple(self.obs[self.obs['controlled_snake_index']][0])
-        # value = SnakeMDP(self.obs, 0.8).value_iteration()
-        # for a in Action.actlist:
-        #     ans += value[Action.go(head, a, self.obs['board_height'], self.obs['board_width'])]
-        return SnakeMDP(self.obs, 0.8).value_iteration()[head]
+        ans = 0
+        for i in range(2, 8):
+            if i < 5:
+                ans += len(self.obs[i])
+            else:
+                ans -= len(self.obs[i])
+        return ans
 
 class MinimaxAgent:
     def __init__(self, obs):
@@ -171,31 +115,9 @@ class MinimaxAgent:
             b = min(b, v)
         return [v, ac]
 
-    def get_action(self):
-        return self.maxValue(GameState(self.obs), 0, 0, -10000, 10000)[1]
+    def get_action(self, index):
+        return self.maxValue(GameState(self.obs), index-2, 0, -10000, 10000)[1]
 
 def my_controller(observation, action_space, is_act_continuous=False):
-    agent_action = []
-    gameState = GameState(observation)
-
-    # agent_action.append(maxValue(gameState, 0, -10000, 10000)[1])
-    # agent_action.append(Action.right)
-    # print(SnakeMDP(observation, 0.8).value_iteration()[tuple(observation[observation['controlled_snake_index']][0])])
-    # print(gameState.evaluationFunction())
-    # v = -10000
-    # ans = Action.bottom
-
-    head = tuple(observation[observation['controlled_snake_index']][0])
-    value = SnakeMDP(observation, 0.9).value_iteration()
-    R = SnakeMDP(observation, 0.9).reward
-    p = SnakeMDP(observation, 0.9).best_policy()
-    print(head)
-    for i in range(observation['board_height']):
-        for j in range(observation['board_width']):
-            print(round(R[(i, j)]), end='\t')
-        print('')
-    return [Action.mapAct[SnakeMDP(observation, 0.9).best_policy()[head]]]
-
-    # ac = Action.mapAct[MinimaxAgent(observation).get_action()]
-    # print(ac)
-    # return [ac]
+    ac = Action.mapAct[MinimaxAgent(observation).get_action(observation['controlled_snake_index'])]
+    return [ac]
