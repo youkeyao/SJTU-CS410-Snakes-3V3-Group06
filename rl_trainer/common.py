@@ -8,7 +8,7 @@ from torch.distributions import Categorical
 import os
 import yaml
 
-device = torch.device("cuda:1") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 
 def hard_update(source, target):
