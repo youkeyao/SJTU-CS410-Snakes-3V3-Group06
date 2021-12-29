@@ -70,7 +70,7 @@ class Agent(object):
         return action
 
     def load_model(self, path):
-        eval = torch.load(path)
+        eval = torch.load(path, map_location=torch.device('cpu'))
         self.eval_net.load_state_dict(eval)
 
 def get_observations(state, agents_index, height, width):

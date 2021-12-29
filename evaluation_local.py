@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import random
-from agent.rl.submission import agent, get_observations
 from env.chooseenv import make
 from tabulate import tabulate
 import argparse
@@ -135,7 +134,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--my_ai", default="rl", help="rl/random")
     parser.add_argument("--opponent", default="random", help="rl/random")
-    parser.add_argument("--episode", default=100)
+    parser.add_argument("--episode", default=100, type=int)
     args = parser.parse_args()
 
     agent_list = [args.my_ai, args.opponent]

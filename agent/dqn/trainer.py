@@ -12,7 +12,7 @@ base_dir = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(base_dir))
 from env.chooseenv import make
 
-DEVICE = torch.device("cpu")
+DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 HEAD = -10
 BODY = -5
 TEAM_HEAD = -3
@@ -100,7 +100,7 @@ class DQN(object):
         if p > self.eps or evaluation:
             x = torch.Tensor(x).to(DEVICE)
             actions_value = self.eval_net.forward(x)
-            action = torch.max(actions_value, 1)[1].data.numpy()
+            action = torch.max(actions_value, 1)[1].data.cpu().numpy()
         else:
             action = np.random.randint(0, 4, (x.shape[0]))
         

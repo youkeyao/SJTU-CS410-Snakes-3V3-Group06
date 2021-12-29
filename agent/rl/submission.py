@@ -141,7 +141,7 @@ class RLAgent(object):
         return action_to_env
 
     def load_model(self, filename):
-        self.actor.load_state_dict(torch.load(filename))
+        self.actor.load_state_dict(torch.load(filename, map_location=torch.device('cpu')))
 
 
 def to_joint_action(action, ctrl_index):
