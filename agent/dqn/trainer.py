@@ -9,6 +9,10 @@ import torch.nn.functional as F
 from pathlib import Path
 import sys
 
+from tensorboardX import SummaryWriter
+
+from log_path import make_logpath
+
 base_dir = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(base_dir))
 from env.chooseenv import make
@@ -153,6 +157,17 @@ class DQN(object):
         model_target_path = self.path + "/target_" + str(episode) + ".pth"
         torch.save(self.target_net.state_dict(), model_target_path)
 
+    def save_model(self, run_dir, episode):
+        base_path = os.path.join(run_dir, 'trained_model')
+        if not os.path.exists(base_path):
+            os.makedirs(base_path)
+
+        model_eval_path = self.path + "/eval_" + str(episode) + ".pth"
+        torch.save(self.eval_net.state_dict(), model_eval_path)
+
+        model_target_path = self.path + "/target_" + str(episode) + ".pth"
+        torch.save(self.target_net.state_dict(), model_target_path)
+
 
 # network input
 def get_observations(state, agents_index, height, width):
@@ -274,6 +289,8 @@ def main(args):
     print(import_s)
     exec(import_s, globals())
 
+    run_dir, log_dir = make_logpath(args.game_name)
+    writer = SummaryWriter(str(log_dir))
     model = DQN(obs_dim, act_dim, args)
 
     episode = 0
@@ -344,12 +361,21 @@ def main(args):
             model.learn()
 
             if args.episode_length <= step or (True in done):
+                reward_tag = 'reward'
+                acr_tag = 'accuracy'
+                writer.add_scalars(reward_tag, global_step=episode,
+                                   tag_scalar_dict={'snake_1': episode_reward[0], 'snake_2': episode_reward[1],
+                                                    'snake_3': episode_reward[2], 'total': np.sum(episode_reward[0:3])})
+
                 win.pop(0)
                 if np.sum(episode_reward[:3]) > np.sum(episode_reward[3:]):
                     win.append(1)
                 else:
                     win.append(0)
                 print('Ep: ', episode, '| Ep_r: ', episode_reward, '| acr: ', np.array(win).sum() / 100)
+                writer.add_scalars(acr_tag, global_step=episode,
+                                   tag_scalar_dict={'win_rate': np.array(win).sum() / 100})
+
                 if episode % 1000 == 0:
                     model.save_model(episode)
                 env.reset()
