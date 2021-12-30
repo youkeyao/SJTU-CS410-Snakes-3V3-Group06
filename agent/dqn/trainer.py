@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 from pathlib import Path
 import sys
+
 base_dir = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(base_dir))
 from env.chooseenv import make
@@ -20,6 +21,7 @@ TEAM_BODY = -1
 OPPONENT_HEAD = -4
 OPPONENT_BODY = -2
 BEAN = 10
+
 
 # Memory for DQN
 class ReplayBuffer:
@@ -48,22 +50,25 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.replay_buffer)
 
+
 class Net(nn.Module):
     def __init__(self, obs_dim, act_dim):
         super(Net, self).__init__()
         self.conv1 = nn.Sequential(
-           nn.Conv2d(in_channels=obs_dim, out_channels=16, kernel_size=5, stride=1, padding=2),
-           nn.ReLU(),
+            nn.Conv2d(in_channels=obs_dim, out_channels=16, kernel_size=5, stride=1, padding=2),
+            nn.ReLU(),
         )
         self.conv2 = nn.Sequential(
-           nn.Conv2d(16, 16, 5, 1, 2),
-           nn.ReLU(),
+            nn.Conv2d(16, 16, 5, 1, 2),
+            nn.ReLU(),
         )
 
         self.fc1 = nn.Linear(6400, 64)
         self.fc1.weight.data.normal_(0, 0.1)
-        self.out = nn.Linear(64, act_dim)
-        self.out.weight.data.normal_(0, 0.1)
+        self.outA = nn.Linear(64, act_dim)
+        self.outA.weight.data.normal_(0, 0.1)
+        self.outV = nn.Linear(64, act_dim)
+        self.outV.weight.data.normal_(0, 0.1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -72,8 +77,11 @@ class Net(nn.Module):
 
         x = self.fc1(x)
         x = F.relu(x)
-        out = self.out(x)
-        return out
+        advantage = self.outA(x)
+        value = self.outV(x)
+
+        Q = value + advantage - advantage.mean()
+        return Q
 
 
 class DQN(object):
@@ -103,14 +111,14 @@ class DQN(object):
             action = torch.max(actions_value, 1)[1].data.cpu().numpy()
         else:
             action = np.random.randint(0, 4, (x.shape[0]))
-        
+
         self.eps *= self.decay_speed
         return action
 
     def learn(self):
         if len(self.replay_buffer) < self.batch_size:
             return
-        
+
         # target parameter update
         if self.learn_step_counter % self.target_replace_iter == 0:
             self.target_net.load_state_dict(self.eval_net.state_dict())
@@ -121,8 +129,8 @@ class DQN(object):
 
         # q_eval w.r.t the action in experience
         q_eval = self.eval_net(b_s).gather(1, b_a)  # shape (batch, 1)
-        q_next = self.target_net(b_s_).detach()     # detach from graph, don't backpropagate
-        q_target = b_r + self.gamma * q_next.max(1)[0].view(self.batch_size, 1)   # shape (batch, 1)
+        q_next = self.target_net(b_s_).detach()  # detach from graph, don't backpropagate
+        q_target = b_r + self.gamma * q_next.max(1)[0].view(self.batch_size, 1)  # shape (batch, 1)
         loss = self.loss_func(q_eval, q_target)
 
         self.optimizer.zero_grad()
@@ -145,35 +153,47 @@ class DQN(object):
         model_target_path = self.path + "/target_" + str(episode) + ".pth"
         torch.save(self.target_net.state_dict(), model_target_path)
 
+
 # network input
 def get_observations(state, agents_index, height, width):
     observations = []
     for i in agents_index:
         sample = []
-        head = state[i+2][0]
-        sample.append(getArea(state[i+2], height, width, head))
+        head = state[i + 2][0]
+        sample.append(get_area(state[i + 2], height, width, head))
         for j in agents_index:
             if j != i:
-                sample.append(getArea(state[j+2], height, width, head))
+                sample.append(get_area(state[j + 2], height, width, head))
         for j in range(1, 8):
-            if j != i+2 and j-2 not in agents_index:
-                sample.append(getArea(state[j], height, width, head))
+            if j != i + 2 and j - 2 not in agents_index:
+                sample.append(get_area(state[j], height, width, head))
         observations.append(sample)
     return np.array(observations)
-def countPos(head, p, width, height):
+
+
+def count_pos(head, p, width, height):
     tmp = [0, 0]
-    tmp[0] = int(p[0] - head[0] + height - 1) % height 
+    tmp[0] = int(p[0] - head[0] + height - 1) % height
     tmp[1] = int(p[1] - head[1] + width * 3 / 2) % width
     return tmp
-def getArea(state, height, width, head):
+
+
+def get_area(state, height, width, head):
     areas = np.zeros((height, width))
     for j in range(len(state)):
-        p = tuple(countPos(head, state[j], width, height))
+        p = tuple(count_pos(head, state[j], width, height))
         if j == 0:
-            areas[p] = 2
+            p_left = tuple(count_pos(head, [state[0][0], state[0][1] - 1], width, height))
+            p_right = tuple(count_pos(head, [state[0][0], state[0][1] + 1], width, height))
+            p_top = tuple(count_pos(head, [state[0][0] + 1, state[0][1]], width, height))
+            p_bottom = tuple(count_pos(head, [state[0][0] - 1, state[0][1]], width, height))
+            areas[p] = 3
+            areas[p_left], areas[p_right], areas[p_top], areas[p_bottom] = 1, 1, 1, 1
         else:
-            areas[p] = 1
+            areas[p] = 2
     return np.concatenate((areas, areas))
+
+
 # def get_observations(state, agents_index, height, width):
 #     observations = np.zeros((len(agents_index), width * height))
 #     for i in agents_index:
@@ -204,14 +224,15 @@ def get_reward(info, snake_index, reward, score):
     snake_heads = [snake[0] for snake in snakes_position]
     step_reward = np.zeros(len(snake_index))
     for i in snake_index:
-        if score == 1:
-            step_reward[i] += 50
-        elif score == 2:
-            step_reward[i] -= 25
-        elif score == 3:
-            step_reward[i] += 10
-        elif score == 4:
-            step_reward[i] -= 5
+        step_reward[i] += score * 10
+        # if score == 1:
+        #     step_reward[i] += 50
+        # elif score == 2:
+        #     step_reward[i] -= 25
+        # elif score == 3:
+        #     step_reward[i] += 50
+        # elif score == 4:
+        #     step_reward[i] -= 25
 
         if reward[i] > 0:
             step_reward[i] += 20
@@ -223,6 +244,7 @@ def get_reward(info, snake_index, reward, score):
                 step_reward[i] -= 10
 
     return step_reward
+
 
 def main(args):
     env = make(args.game_name, conf=None)
@@ -285,31 +307,34 @@ def main(args):
                 elif team_actions[i] == 3:
                     team_actions[i] = [[0, 0, 0, 1]]
             opponent_actions = []
-            for i in [5,6,7]:
-                each = eval(import_name)(state[i-2], actions_space[0], False)
+            for i in [5, 6, 7]:
+                each = eval(import_name)(state[i - 2], actions_space[0], False)
                 opponent_actions.append(each)
-            
-            next_state, reward, done, _, info = env.step(team_actions+opponent_actions)
+
+            next_state, reward, done, _, info = env.step(team_actions + opponent_actions)
             next_state_to_training = next_state[0]
             next_obs = get_observations(next_state_to_training, ctrl_agent_index, height, width)
 
             reward = np.array(reward)
             episode_reward += reward
 
-            if done:
-                if np.sum(episode_reward[:3]) > np.sum(episode_reward[3:]):
-                    step_reward = get_reward(info, ctrl_agent_index, reward, score=1)
-                elif np.sum(episode_reward[:3]) < np.sum(episode_reward[3:]):
-                    step_reward = get_reward(info, ctrl_agent_index, reward, score=2)
-                else:
-                    step_reward = get_reward(info, ctrl_agent_index, reward, score=0)
-            else:
-                if np.sum(episode_reward[:3]) > np.sum(episode_reward[3:]):
-                    step_reward = get_reward(info, ctrl_agent_index, reward, score=3)
-                elif np.sum(episode_reward[:3]) < np.sum(episode_reward[3:]):
-                    step_reward = get_reward(info, ctrl_agent_index, reward, score=4)
-                else:
-                    step_reward = get_reward(info, ctrl_agent_index, reward, score=0)
+            step_reward = get_reward(info, ctrl_agent_index, reward,
+                                     score=np.sum(episode_reward[:3]) - np.sum(episode_reward[3:]))
+
+            # if done:
+            #     if np.sum(episode_reward[:3]) > np.sum(episode_reward[3:]):
+            #         step_reward = get_reward(info, ctrl_agent_index, reward, score=1)
+            #     elif np.sum(episode_reward[:3]) < np.sum(episode_reward[3:]):
+            #         step_reward = get_reward(info, ctrl_agent_index, reward, score=2)
+            #     else:
+            #         step_reward = get_reward(info, ctrl_agent_index, reward, score=0)
+            # else:
+            #     if np.sum(episode_reward[:3]) > np.sum(episode_reward[3:]):
+            #         step_reward = get_reward(info, ctrl_agent_index, reward, score=3)
+            #     elif np.sum(episode_reward[:3]) < np.sum(episode_reward[3:]):
+            #         step_reward = get_reward(info, ctrl_agent_index, reward, score=4)
+            #     else:
+            #         step_reward = get_reward(info, ctrl_agent_index, reward, score=0)
 
             done = np.array([done] * ctrl_agent_num)
 
@@ -324,8 +349,8 @@ def main(args):
                     win.append(1)
                 else:
                     win.append(0)
-                print('Ep: ', episode, '| Ep_r: ', episode_reward, '| acr: ', np.array(win).sum()/100)
-                if episode % 5000 == 0:
+                print('Ep: ', episode, '| Ep_r: ', episode_reward, '| acr: ', np.array(win).sum() / 100)
+                if episode % 1000 == 0:
                     model.save_model(episode)
                 env.reset()
                 break
@@ -333,6 +358,7 @@ def main(args):
             obs = next_obs
             state = next_state
             step += 1
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

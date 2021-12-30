@@ -111,7 +111,7 @@ def my_controller(observation, action_space, is_act_continuous=False):
     obs = get_observations(observation, indexs, board_height, board_width)
     # agent
     agent = Agent(7, 4)
-    eval = os.path.dirname(os.path.abspath(__file__)) + "/eval_5000.pth"
+    eval = os.path.dirname(os.path.abspath(__file__)) + "/eval_12000.pth"
     agent.load_model(eval)
     action = agent.choose_action(obs)[o_index-o_indexs_min-2]
     return [Action.mapAct[action]]
