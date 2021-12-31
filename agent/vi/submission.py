@@ -1,6 +1,8 @@
-BEAN = 10
+BEAN = 50
 BODY = -100
 HEAD = -100
+TAIL = 100
+ENOUGH_LEN = 25
 
 class Action:
     top = [1, 0, 0, 0]
@@ -34,10 +36,11 @@ class SnakeMDP:
                 self.states.add((i, j))
                 self.reward[(i,j)] = 0
         self.gamma = gamma
+        head = obs[obs['controlled_snake_index']][0]
         
         # Bean reward
         for cor in obs[1]:
-            self.reward[tuple(cor)] = 10
+            self.reward[tuple(cor)] = BEAN
         # snake collision reward
         for i in range(2, 8):
             for cor in obs[i]:
@@ -47,13 +50,18 @@ class SnakeMDP:
                         pos = Action.go(tuple(cor), ac, obs['board_height'], obs['board_width'])
                         if self.reward[pos] >= 0:
                             self.reward[pos] = HEAD
-        self.reward[tuple(obs[obs['controlled_snake_index']][0])] = 0
+        self.reward[tuple(head)] = 0
+        # if long enough, follow tail
+        length = len(obs[obs['controlled_snake_index']])
+        if length >= ENOUGH_LEN:
+            tail = obs[obs['controlled_snake_index']][0]
+            self.reward[tuple(obs[obs['controlled_snake_index']][length-1])] = TAIL
 
         self.transitions = {}
         for s in self.states:
             self.transitions[s] = {}
             for a in Action.actlist:
-                if self.reward[s]:
+                if self.reward[s] < 0:
                     self.transitions[s][a] = [(0.0, s)]
                 else:
                     self.transitions[s][a] = [(1.0, Action.go(s, a, obs['board_height'], obs['board_width']))]
@@ -97,7 +105,24 @@ class SnakeMDP:
             policy[s] = actions[bestIndex]
         return policy
 
+def can_follow_tail(obs):
+    length = len(obs[obs['controlled_snake_index']])
+    head = tuple(obs[obs['controlled_snake_index']][0])
+    tail = tuple(obs[obs['controlled_snake_index']][length - 1])
+
+    act = ((tail[0] - head[0] + obs['board_height'] % obs['board_height'], tail[1] - head[1] + obs['board_width'] % obs['board_width']))
+    if length >= ENOUGH_LEN and act in Action.actlist:
+        return (True, act)
+    else:
+        return (False,)
+
 def my_controller(observation, action_space, is_act_continuous=False):
+    follow_tail = can_follow_tail(observation)
+    if follow_tail[0]:
+        action = follow_tail[1]
+        return [Action.mapAct[action]]
+
     head = tuple(observation[observation['controlled_snake_index']][0])
     p = SnakeMDP(observation, 0.9).value_iteration()[1]
-    return [Action.mapAct[p[head]]]
+    action = p[head]
+    return [Action.mapAct[action]]
