@@ -17,7 +17,8 @@ base_dir = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(base_dir))
 from env.chooseenv import make
 
-DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+DEVICE = torch.device(
+    "cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 HEAD = -10
 BODY = -5
 TEAM_HEAD = -3
@@ -43,11 +44,16 @@ class ReplayBuffer:
     def get_batches(self):
         sample_batch = random.sample(self.replay_buffer, self.batch_size)
 
-        state_batches = torch.Tensor(np.array([_[0] for _ in sample_batch])).to(DEVICE)
-        action_batches = torch.LongTensor(np.array([_[1] for _ in sample_batch])).reshape(self.batch_size, 1).to(DEVICE)
-        reward_batches = torch.Tensor(np.array([_[2] for _ in sample_batch])).reshape(self.batch_size, 1).to(DEVICE)
-        next_state_batches = torch.Tensor(np.array([_[3] for _ in sample_batch])).to(DEVICE)
-        done_batches = torch.Tensor(np.array([_[4] for _ in sample_batch])).to(DEVICE)
+        state_batches = torch.Tensor(
+            np.array([_[0] for _ in sample_batch])).to(DEVICE)
+        action_batches = torch.LongTensor(
+            np.array([_[1] for _ in sample_batch])).reshape(self.batch_size, 1).to(DEVICE)
+        reward_batches = torch.Tensor(np.array([_[2] for _ in sample_batch])).reshape(
+            self.batch_size, 1).to(DEVICE)
+        next_state_batches = torch.Tensor(
+            np.array([_[3] for _ in sample_batch])).to(DEVICE)
+        done_batches = torch.Tensor(
+            np.array([_[4] for _ in sample_batch])).to(DEVICE)
 
         return state_batches, action_batches, reward_batches, next_state_batches, done_batches
 
@@ -59,7 +65,8 @@ class Net(nn.Module):
     def __init__(self, obs_dim, act_dim):
         super(Net, self).__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels=obs_dim, out_channels=16, kernel_size=5, stride=1, padding=2),
+            nn.Conv2d(in_channels=obs_dim, out_channels=16,
+                      kernel_size=5, stride=1, padding=2),
             nn.ReLU(),
         )
         self.conv2 = nn.Sequential(
@@ -103,8 +110,10 @@ class DQN(object):
         self.learn_step_counter = 0
 
         self.replay_buffer = ReplayBuffer(args.buffer_size, args.batch_size)
-        self.eval_net, self.target_net = Net(obs_dim, act_dim).to(DEVICE), Net(obs_dim, act_dim).to(DEVICE)
-        self.optimizer = torch.optim.Adam(self.eval_net.parameters(), lr=args.lr)
+        self.eval_net, self.target_net = Net(obs_dim, act_dim).to(
+            DEVICE), Net(obs_dim, act_dim).to(DEVICE)
+        self.optimizer = torch.optim.Adam(
+            self.eval_net.parameters(), lr=args.lr)
         self.loss_func = nn.MSELoss()
 
     def choose_action(self, x, evaluation=False):
@@ -133,8 +142,10 @@ class DQN(object):
 
         # q_eval w.r.t the action in experience
         q_eval = self.eval_net(b_s).gather(1, b_a)  # shape (batch, 1)
-        q_next = self.target_net(b_s_).detach()  # detach from graph, don't backpropagate
-        q_target = b_r + self.gamma * q_next.max(1)[0].view(self.batch_size, 1)  # shape (batch, 1)
+        # detach from graph, don't backpropagate
+        q_next = self.target_net(b_s_).detach()
+        q_target = b_r + self.gamma * \
+            q_next.max(1)[0].view(self.batch_size, 1)  # shape (batch, 1)
         loss = self.loss_func(q_eval, q_target)
 
         self.optimizer.zero_grad()
@@ -150,22 +161,15 @@ class DQN(object):
         self.eval_net.load_state_dict(eval)
         self.target_net.load_state_dict(target)
 
-    def save_model(self, episode):
-        model_eval_path = self.path + "/eval_" + str(episode) + ".pth"
-        torch.save(self.eval_net.state_dict(), model_eval_path)
-
-        model_target_path = self.path + "/target_" + str(episode) + ".pth"
-        torch.save(self.target_net.state_dict(), model_target_path)
-
     def save_model(self, run_dir, episode):
         base_path = os.path.join(run_dir, 'trained_model')
         if not os.path.exists(base_path):
             os.makedirs(base_path)
 
-        model_eval_path = self.path + "/eval_" + str(episode) + ".pth"
+        model_eval_path = base_path + "/eval_" + str(episode) + ".pth"
         torch.save(self.eval_net.state_dict(), model_eval_path)
 
-        model_target_path = self.path + "/target_" + str(episode) + ".pth"
+        model_target_path = base_path + "/target_" + str(episode) + ".pth"
         torch.save(self.target_net.state_dict(), model_target_path)
 
 
@@ -198,10 +202,14 @@ def get_area(state, height, width, head):
     for j in range(len(state)):
         p = tuple(count_pos(head, state[j], width, height))
         if j == 0:
-            p_left = tuple(count_pos(head, [state[0][0], state[0][1] - 1], width, height))
-            p_right = tuple(count_pos(head, [state[0][0], state[0][1] + 1], width, height))
-            p_top = tuple(count_pos(head, [state[0][0] + 1, state[0][1]], width, height))
-            p_bottom = tuple(count_pos(head, [state[0][0] - 1, state[0][1]], width, height))
+            p_left = tuple(
+                count_pos(head, [state[0][0], state[0][1] - 1], width, height))
+            p_right = tuple(
+                count_pos(head, [state[0][0], state[0][1] + 1], width, height))
+            p_top = tuple(
+                count_pos(head, [state[0][0] + 1, state[0][1]], width, height))
+            p_bottom = tuple(
+                count_pos(head, [state[0][0] - 1, state[0][1]], width, height))
             areas[p] = 3
             areas[p_left], areas[p_right], areas[p_top], areas[p_bottom] = 1, 1, 1, 1
         else:
@@ -239,7 +247,7 @@ def get_reward(info, snake_index, reward, score):
     snake_heads = [snake[0] for snake in snakes_position]
     step_reward = np.zeros(len(snake_index))
     for i in snake_index:
-        step_reward[i] += score * 10
+        step_reward[i] += 50 if (score > 0) else -50
         # if score == 1:
         #     step_reward[i] += 50
         # elif score == 2:
@@ -253,7 +261,8 @@ def get_reward(info, snake_index, reward, score):
             step_reward[i] += 20
         else:
             self_head = np.array(snake_heads[i])
-            dists = [np.sqrt(np.sum(np.square(other_head - self_head))) for other_head in beans_position]
+            dists = [np.sqrt(np.sum(np.square(other_head - self_head)))
+                     for other_head in beans_position]
             step_reward[i] -= min(dists)
             if reward[i] < 0:
                 step_reward[i] -= 10
@@ -282,7 +291,8 @@ def main(args):
 
     actions_space = env.joint_action_space
 
-    file_path = os.path.dirname(os.path.abspath(__file__)) + "/agent/" + args.opponent + "/submission.py"
+    file_path = os.path.dirname(os.path.abspath(
+        __file__)) + "/agent/" + args.opponent + "/submission.py"
     import_path = '.'.join(file_path.split('/')[-3:])[:-3]
     import_name = "my_controller"
     import_s = "from %s import %s" % (import_path, import_name)
@@ -305,7 +315,8 @@ def main(args):
         state = env.reset()
 
         state_to_training = state[0]
-        obs = get_observations(state_to_training, ctrl_agent_index, height, width)
+        obs = get_observations(
+            state_to_training, ctrl_agent_index, height, width)
 
         episode += 1
         step = 0
@@ -328,9 +339,11 @@ def main(args):
                 each = eval(import_name)(state[i - 2], actions_space[0], False)
                 opponent_actions.append(each)
 
-            next_state, reward, done, _, info = env.step(team_actions + opponent_actions)
+            next_state, reward, done, _, info = env.step(
+                team_actions + opponent_actions)
             next_state_to_training = next_state[0]
-            next_obs = get_observations(next_state_to_training, ctrl_agent_index, height, width)
+            next_obs = get_observations(
+                next_state_to_training, ctrl_agent_index, height, width)
 
             reward = np.array(reward)
             episode_reward += reward
@@ -356,7 +369,8 @@ def main(args):
             done = np.array([done] * ctrl_agent_num)
 
             for i in range(ctrl_agent_num):
-                model.replay_buffer.push(obs[i], actions[i], step_reward[i], next_obs[i], done[i])
+                model.replay_buffer.push(
+                    obs[i], actions[i], step_reward[i], next_obs[i], done[i])
 
             model.learn()
 
@@ -372,12 +386,13 @@ def main(args):
                     win.append(1)
                 else:
                     win.append(0)
-                print('Ep: ', episode, '| Ep_r: ', episode_reward, '| acr: ', np.array(win).sum() / 100)
+                print('Ep: ', episode, '| Ep_r: ', episode_reward,
+                      '| eps: ', model.eps, '| acr: ', np.array(win).sum() / 100)
                 writer.add_scalars(acr_tag, global_step=episode,
                                    tag_scalar_dict={'win_rate': np.array(win).sum() / 100})
 
                 if episode % 1000 == 0:
-                    model.save_model(episode)
+                    model.save_model(run_dir, episode)
                 env.reset()
                 break
 

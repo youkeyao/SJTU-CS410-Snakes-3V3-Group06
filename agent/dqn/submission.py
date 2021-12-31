@@ -39,8 +39,10 @@ class Net(nn.Module):
 
         self.fc1 = nn.Linear(6400, 64)
         self.fc1.weight.data.normal_(0, 0.1)
-        self.out = nn.Linear(64, act_dim)
-        self.out.weight.data.normal_(0, 0.1)
+        self.outA = nn.Linear(64, act_dim)
+        self.outA.weight.data.normal_(0, 0.1)
+        self.outV = nn.Linear(64, act_dim)
+        self.outV.weight.data.normal_(0, 0.1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -49,8 +51,11 @@ class Net(nn.Module):
 
         x = self.fc1(x)
         x = F.relu(x)
-        out = self.out(x)
-        return out
+        advantage = self.outA(x)
+        value = self.outV(x)
+
+        Q = value + advantage - advantage.mean()
+        return Q
 
 
 class Agent(object):
@@ -111,7 +116,7 @@ def my_controller(observation, action_space, is_act_continuous=False):
     obs = get_observations(observation, indexs, board_height, board_width)
     # agent
     agent = Agent(7, 4)
-    eval = os.path.dirname(os.path.abspath(__file__)) + "/eval_12000.pth"
+    eval = os.path.dirname(os.path.abspath(__file__)) + "/eval_27000.pth"
     agent.load_model(eval)
     action = agent.choose_action(obs)[o_index-o_indexs_min-2]
     return [Action.mapAct[action]]
