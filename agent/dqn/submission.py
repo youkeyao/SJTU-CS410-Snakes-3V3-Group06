@@ -5,19 +5,14 @@ from torch import nn
 import torch.nn.functional as F
 
 DEVICE = torch.device("cpu")
-HEAD = 2
-BODY = 1
-TEAM_HEAD = -3
-TEAM_BODY = -1
-OPPONENT_HEAD = -4
-OPPONENT_BODY = -2
-BEAN = 5
+ENOUGH_LEN = 25
 
 class Action:
     top = [1, 0, 0, 0]
     bottom = [0, 1, 0, 0]
     left = [0, 0, 1, 0]
     right = [0, 0, 0, 1]
+    actlist = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     mapAct = {
         0: top,
         1: bottom,
@@ -37,11 +32,11 @@ class Net(nn.Module):
            nn.ReLU(),
         )
 
-        self.fc1 = nn.Linear(6400, 64)
+        self.fc1 = nn.Linear(6400, 32)
         self.fc1.weight.data.normal_(0, 0.1)
-        self.outA = nn.Linear(64, act_dim)
+        self.outA = nn.Linear(32, act_dim)
         self.outA.weight.data.normal_(0, 0.1)
-        self.outV = nn.Linear(64, act_dim)
+        self.outV = nn.Linear(32, 1)
         self.outV.weight.data.normal_(0, 0.1)
 
     def forward(self, x):
@@ -51,10 +46,11 @@ class Net(nn.Module):
 
         x = self.fc1(x)
         x = F.relu(x)
+
         advantage = self.outA(x)
         value = self.outV(x)
 
-        Q = value + advantage - advantage.mean()
+        Q = value + advantage - advantage.mean(-1).view(-1,1)
         return Q
 
 
@@ -75,7 +71,7 @@ class Agent(object):
         return action
 
     def load_model(self, path):
-        eval = torch.load(path, map_location=torch.device('cpu'))
+        eval = torch.load(path)
         self.eval_net.load_state_dict(eval)
 
 def get_observations(state, agents_index, height, width):
@@ -83,31 +79,54 @@ def get_observations(state, agents_index, height, width):
     for i in agents_index:
         sample = []
         head = state[i+2][0]
-        sample.append(getArea(state[i+2], height, width, head))
-        for j in agents_index:
-            if j != i:
-                sample.append(getArea(state[j+2], height, width, head))
-        for j in range(1, 8):
-            if j != i+2 and j-2 not in agents_index:
-                sample.append(getArea(state[j], height, width, head))
+        sample.append(getArea(state[i+2], height, width, head, True))
+
+        other_snake = np.zeros((width, width))
+        for j in range(2, 8):
+            other_snake += getArea(state[j], height, width, head, True)
+        sample.append(other_snake)
+
+        sample.append(getArea(state[1], height, width, head, False))
         observations.append(sample)
     return np.array(observations)
+
 def countPos(head, p, width, height):
     tmp = [0, 0]
     tmp[0] = int(p[0] - head[0] + height - 1) % height 
     tmp[1] = int(p[1] - head[1] + width * 3 / 2) % width
     return tmp
-def getArea(state, height, width, head):
+
+def getArea(state, height, width, head, isSnake):
     areas = np.zeros((height, width))
     for j in range(len(state)):
         p = tuple(countPos(head, state[j], width, height))
-        if j == 0:
-            areas[p] = 2
+        if isSnake and j == 0:
+            areas[p] = 10
+            areas[((p[0] + 1) % height, p[1])] = 1
+            areas[((p[0] + height - 1) % height, p[1])] = 1
+            areas[(p[0], (p[1] + 1) % width)] = 1
+            areas[(p[0], (p[1] + width - 1) % width)] = 1
         else:
-            areas[p] = 1
+            areas[p] = 5
     return np.concatenate((areas, areas))
 
+def can_follow_tail(obs):
+    length = len(obs[obs['controlled_snake_index']])
+    head = tuple(obs[obs['controlled_snake_index']][0])
+    tail = tuple(obs[obs['controlled_snake_index']][length - 1])
+
+    act = ((tail[0] - head[0] + obs['board_height'] % obs['board_height'], tail[1] - head[1] + obs['board_width'] % obs['board_width']))
+    if length >= ENOUGH_LEN and act in Action.actlist:
+        return (True, Action.actlist.index(act))
+    else:
+        return (False,)
+
 def my_controller(observation, action_space, is_act_continuous=False):
+    follow_tail = can_follow_tail(observation)
+    if follow_tail[0]:
+        action = follow_tail[1]
+        return [Action.mapAct[action]]
+
     board_width = observation['board_width']
     board_height = observation['board_height']
     o_index = observation['controlled_snake_index']  # 2, 3, 4, 5, 6, 7 -> indexs = [0,1,2,3,4,5]
@@ -115,8 +134,8 @@ def my_controller(observation, action_space, is_act_continuous=False):
     indexs = [o_indexs_min, o_indexs_min+1, o_indexs_min+2]
     obs = get_observations(observation, indexs, board_height, board_width)
     # agent
-    agent = Agent(7, 4)
-    eval = os.path.dirname(os.path.abspath(__file__)) + "/eval_27000.pth"
+    agent = Agent(3, 4)
+    eval = os.path.dirname(os.path.abspath(__file__)) + "/trained_model/eval_3000.pth"
     agent.load_model(eval)
     action = agent.choose_action(obs)[o_index-o_indexs_min-2]
     return [Action.mapAct[action]]
