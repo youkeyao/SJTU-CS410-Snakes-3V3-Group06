@@ -1,6 +1,6 @@
 BEAN = 50
-BODY = -100
-HEAD = -100
+DANGER = -100
+WEAK_DANGER = -90
 TAIL = 100
 ENOUGH_LEN = 25
 
@@ -38,19 +38,25 @@ class SnakeMDP:
         self.gamma = gamma
         head = obs[obs['controlled_snake_index']][0]
         
-        # Bean reward
-        for cor in obs[1]:
-            self.reward[tuple(cor)] = BEAN
         # snake collision reward
         for i in range(2, 8):
             for cor in obs[i]:
-                self.reward[tuple(cor)] = BODY
+                self.reward[tuple(cor)] = DANGER
                 if cor == obs[i][0] and i != obs['controlled_snake_index']:
                     for ac in Action.actlist:
                         pos = Action.go(tuple(cor), ac, obs['board_height'], obs['board_width'])
                         if self.reward[pos] >= 0:
-                            self.reward[pos] = HEAD
+                            self.reward[pos] = WEAK_DANGER
         self.reward[tuple(head)] = 0
+        # Bean reward
+        for cor in obs[1]:
+            if self.reward[tuple(cor)] < 0:
+                continue
+            count = 0
+            for ac in Action.actlist:
+                pos = Action.go(tuple(cor), ac, obs['board_height'], obs['board_width'])
+                count += self.reward[pos]
+            self.reward[tuple(cor)] = BEAN if count > 3*DANGER else DANGER
         # if long enough, follow tail
         length = len(obs[obs['controlled_snake_index']])
         if length >= ENOUGH_LEN:
@@ -61,7 +67,7 @@ class SnakeMDP:
         for s in self.states:
             self.transitions[s] = {}
             for a in Action.actlist:
-                if self.reward[s] < 0:
+                if self.reward[s] < WEAK_DANGER:
                     self.transitions[s][a] = [(0.0, s)]
                 else:
                     self.transitions[s][a] = [(1.0, Action.go(s, a, obs['board_height'], obs['board_width']))]
@@ -81,7 +87,7 @@ class SnakeMDP:
             q += p[0] * (self.R(p[1]) + self.gamma * U[p[1]])
         return q
 
-    def value_iteration(self, epsilon=0.001):
+    def value_iteration(self, epsilon=0.01):
         U1 = {s: 0 for s in self.states}
         while True:
             convergent = True
