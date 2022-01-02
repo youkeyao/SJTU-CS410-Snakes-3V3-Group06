@@ -2,7 +2,7 @@ BEAN = 10
 DANGER = -100
 WEAK_DANGER = -90
 TAIL = 100
-ENOUGH_LEN = 24
+ENOUGH_LEN = 23
 
 class Action:
     top = [1, 0, 0, 0]
@@ -52,8 +52,8 @@ class SnakeMDP:
                     for ac in Action.actlist:
                         pos = Action.go(tuple(cor), ac, obs['board_height'], obs['board_width'])
                         if self.reward[pos] >= 0:
-                            flag = score > -10 or len(obs[i]) < 10 or len(obs[ctrl_index]) > 15 or ((ctrl_index < 5 and i < 5) or (ctrl_index > 4 and i > 4))
-                            self.reward[pos] = WEAK_DANGER * (1 if flag else -0.1)
+                            flag = score > -10 or len(obs[i]) < 10 or len(obs[ctrl_index]) > 13 or ((ctrl_index < 5 and i < 5) or (ctrl_index > 4 and i > 4))
+                            self.reward[pos] = WEAK_DANGER * (1 if flag else -0.12)
         self.reward[tuple(head)] = 0
         # Bean reward
         for cor in obs[1]:
@@ -63,7 +63,7 @@ class SnakeMDP:
             for ac in Action.actlist:
                 pos = Action.go(tuple(cor), ac, obs['board_height'], obs['board_width'])
                 count += self.reward[pos]
-            self.reward[tuple(cor)] = BEAN if count > 3*DANGER else DANGER
+            self.reward[tuple(cor)] = BEAN if count > 3*DANGER else WEAK_DANGER
         # if long enough, follow tail
         length = len(obs[ctrl_index])
         if length >= ENOUGH_LEN:
