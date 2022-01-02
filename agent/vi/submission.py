@@ -1,8 +1,8 @@
-BEAN = 50
+BEAN = 10
 DANGER = -100
 WEAK_DANGER = -90
 TAIL = 100
-ENOUGH_LEN = 25
+ENOUGH_LEN = 24
 
 class Action:
     top = [1, 0, 0, 0]
@@ -36,17 +36,24 @@ class SnakeMDP:
                 self.states.add((i, j))
                 self.reward[(i,j)] = 0
         self.gamma = gamma
-        head = obs[obs['controlled_snake_index']][0]
+        ctrl_index = obs['controlled_snake_index']
+        head = obs[ctrl_index][0]
+        score = 0
+        for i in range(2, 5):
+            score += len(obs[i]) * (1 if ctrl_index < 5 else -1)
+        for i in range(5, 8):
+            score += len(obs[i]) * (-1 if ctrl_index < 5 else 1)
         
         # snake collision reward
         for i in range(2, 8):
             for cor in obs[i]:
                 self.reward[tuple(cor)] = DANGER
-                if cor == obs[i][0] and i != obs['controlled_snake_index']:
+                if cor == obs[i][0] and i != ctrl_index:
                     for ac in Action.actlist:
                         pos = Action.go(tuple(cor), ac, obs['board_height'], obs['board_width'])
                         if self.reward[pos] >= 0:
-                            self.reward[pos] = WEAK_DANGER
+                            flag = score > -10 or len(obs[i]) < 10 or len(obs[ctrl_index]) > 15 or ((ctrl_index < 5 and i < 5) or (ctrl_index > 4 and i > 4))
+                            self.reward[pos] = WEAK_DANGER * (1 if flag else -0.1)
         self.reward[tuple(head)] = 0
         # Bean reward
         for cor in obs[1]:
@@ -58,10 +65,10 @@ class SnakeMDP:
                 count += self.reward[pos]
             self.reward[tuple(cor)] = BEAN if count > 3*DANGER else DANGER
         # if long enough, follow tail
-        length = len(obs[obs['controlled_snake_index']])
+        length = len(obs[ctrl_index])
         if length >= ENOUGH_LEN:
-            tail = obs[obs['controlled_snake_index']][0]
-            self.reward[tuple(obs[obs['controlled_snake_index']][length-1])] = TAIL
+            tail = obs[ctrl_index][length-1]
+            self.reward[tuple(tail)] = TAIL
 
         self.transitions = {}
         for s in self.states:
